@@ -1,76 +1,191 @@
-# Project Title  
+# Keyword Spotting (KWS) System
 
-## Description  
-Provide a brief but informative description of your project.  
+This is a simple Keyword Spotting system that uses mel spectrogram features and template matching to detect keywords in audio signals. The system is designed to detect specific spoken words or phrases in continuous audio streams.
 
-Example:  
-This repository contains code for analyzing data related to bird species monitoring in the Mt. Kenya ecosystem. The analysis supports findings presented in the paper:  
-*"Comparing point counts, passive acoustic monitoring, citizen science, and machine learning for bird species monitoring in the Mt. Kenya ecosystem,"* submitted to *Philosophical Transactions of the Royal Society B*.  
+## Features
 
-## Requirements  
-List dependencies or link to a `requirements.txt` file.  
+- Audio preprocessing with bandpass filtering (300Hz - 3000Hz)
+- Mel spectrogram feature extraction
+- Template matching using cosine similarity
+- Visualization of detections with waveform and spectrogram
+- Configurable parameters for feature extraction
 
-Example:  
-To run this project, install the required dependencies using:  
-```
+## Requirements
+
+Install the required packages using pip:
+
+```bash
 pip install -r requirements.txt
 ```
 
-or 
+## Implementation Steps
 
-Alternatively, list required packages:
+### 1. Audio Preprocessing
+The preprocessing stage involves two main steps:
 
-    -numpy
-    -pandas
-    -torch
-    -scikit-learn
-    
-## Installation/Usage
-Provide step-by-step instructions to set up and use the project.
+1. **Bandpass Filtering (300Hz - 3000Hz)**
+   - Removes frequencies outside the speech range
+   - Reduces background noise
+   - Improves signal-to-noise ratio
+   - Uses a 4th-order Butterworth filter
+   - Implementation: `preprocess_audio()` method
 
-Example:
+2. **Audio Normalization**
+   - Scales audio amplitude to [-1, 1] range
+   - Ensures consistent signal levels
+   - Helps in feature extraction stability
+
+### 2. Feature Extraction
+The system uses Mel spectrograms as features:
+
+1. **Mel Spectrogram Computation**
+   - Converts audio to frequency domain using STFT
+   - Applies mel-scale filterbank (40 bands)
+   - Parameters:
+     - Window length: 400 samples
+     - Hop length: 160 samples
+     - Sample rate: 16000 Hz
+   - Implementation: `extract_features()` method
+
+2. **Log-scale Conversion**
+   - Converts power spectrogram to decibel scale
+   - Improves feature representation
+   - Better matches human auditory perception
+
+### 3. Keyword Detection
+The detection process uses template matching:
+
+1. **Template Creation**
+   - Uses a clean recording of the keyword
+   - Extracts mel spectrogram features
+   - Stores as reference template
+   - Implementation: `set_keyword_template()` method
+
+2. **Template Matching**
+   - Uses sliding window approach
+   - Computes cosine similarity between template and audio segments
+   - Parameters:
+     - Window size: matches template length
+     - Step size: 1 frame
+   - Implementation: `detect_keyword()` method
+
+3. **Peak Detection and Grouping**
+   - Identifies similarity scores above threshold
+   - Groups nearby detections
+   - Prevents multiple detections of same occurrence
+   - Parameters:
+     - Threshold: 0.7 (adjustable)
+     - Grouping window: template length
+
+### 4. Visualization
+The system provides visual feedback:
+
+1. **Waveform Display**
+   - Shows audio waveform
+   - Marks detection points
+   - Helps verify detection accuracy
+
+2. **Spectrogram Display**
+   - Shows mel spectrogram
+   - Visualizes frequency content
+   - Aids in understanding detection process
+
+## Usage
+
+1. Prepare your audio files:
+   - `keyword.wav`: A clean recording of the keyword you want to detect
+   - `test_audio.wav`: The audio file in which you want to detect the keyword
+
+2. Run the system:
+
+```bash
+python kws_system.py
 ```
-# Clone the repository
-git clone https://github.com/username/repository-name.git  
 
-# Navigate to the project directory
-cd repository-name  
+## Technical Details
 
-# Install dependencies
-pip install -r requirements.txt  
+### Parameters
+You can adjust the following parameters in the `KWSSystem` class:
 
-# Run the main script
-python main.py  
+- `sample_rate`: Audio sampling rate (default: 16000 Hz)
+  - Standard rate for speech processing
+  - Balances quality and computational cost
+
+- `n_mels`: Number of mel bands (default: 40)
+  - Represents frequency resolution
+  - Higher values capture more detail but increase computation
+
+- `hop_length`: Number of samples between frames (default: 160)
+  - Controls temporal resolution
+  - Smaller values give better time precision
+
+- `win_length`: Window length for STFT (default: 400)
+  - Affects frequency resolution
+  - Longer windows give better frequency resolution
+
+### Example Code
+
+```python
+from kws_system import KWSSystem
+
+# Initialize the system
+kws = KWSSystem()
+
+# Load and set keyword template
+keyword_audio, sr = librosa.load('keyword.wav', sr=16000)
+kws.set_keyword_template(keyword_audio)
+
+# Load test audio
+test_audio, sr = librosa.load('test_audio.wav', sr=16000)
+
+# Detect keywords
+detections = kws.detect_keyword(test_audio, threshold=0.7)
+
+# Visualize results
+kws.visualize_detection(test_audio, detections)
 ```
 
-## Data Access
+## Performance Considerations
 
-Describe how users can access/download the dataset.
+1. **Accuracy Factors**
+   - Quality of keyword template
+   - Background noise levels
+   - Speaker variations
+   - Speaking rate variations
 
-Example:
-    Public Data: Link to dataset
-    Request Access: Contact your-email@example.com to obtain the dataset.
-    
-## Citation
-If the project is linked to a paper, provide a citation.
+2. **Computational Efficiency**
+   - Template matching is computationally intensive
+   - Processing time scales with audio length
+   - Consider batch processing for long audio
 
-Example:
-If you use this repository, please cite:
-```
-@article{yourcitation2025,
-  author = {Author Name, Co-Author Name},
-  title = {Your Paper Title},
-  journal = {},
-  year = {2025},
-  volume = {X},
-  pages = {XX-XX},
-  doi = {XX.XXXXX/journal.xxxxxx}
-}
+3. **Memory Usage**
+   - Mel spectrograms require significant memory
+   - Consider processing in chunks for long audio
 
-```
-## Acknowledgements
+## Best Practices
 
-Thank contributors, funding sources, or supporting organizations.
+1. **Template Recording**
+   - Use clear, isolated keyword recordings
+   - Record in similar conditions to test audio
+   - Consider multiple templates for robustness
 
-Example:
-We acknowledge the support of [Institution Name] and funding from [Grant Name]. Special thanks to contributors and collaborators for their valuable input.
+2. **Threshold Selection**
+   - Start with default (0.7)
+   - Adjust based on:
+     - False positive rate
+     - False negative rate
+     - Application requirements
+
+3. **Audio Quality**
+   - Use high-quality recordings
+   - Minimize background noise
+   - Maintain consistent recording conditions
+
+## Notes
+
+- The system works best with clear, isolated keyword recordings
+- Adjust the threshold parameter based on your needs (default: 0.7)
+- The bandpass filter is optimized for speech signals
+- The visualization helps in understanding the detection process
+- Consider using multiple templates for better robustness
+- Regular evaluation and threshold adjustment may be needed

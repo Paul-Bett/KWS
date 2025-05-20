@@ -1,0 +1,6 @@
+numpy>=1.19.2
+librosa>=0.8.0
+scipy>=1.6.0
+scikit-learn>=0.24.0
+soundfile>=0.10.3
+matplotlib>=3.3.0 
