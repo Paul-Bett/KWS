@@ -1,139 +1,156 @@
 import os
-import numpy as np
 import librosa
-import soundfile as sf
-from typing import List, Tuple
-import shutil
+import numpy as np
+from typing import Tuple, List, Dict
+import tensorflow as tf
+from pathlib import Path
+import requests
 from tqdm import tqdm
+import tarfile
+import shutil
 
 class AudioDataLoader:
     def __init__(self, sample_rate: int = 16000):
-        """
-        Initialize audio data loader.
-        
-        Args:
-            sample_rate: Target sample rate for audio files
-        """
         self.sample_rate = sample_rate
     
-    def load_audio(self, file_path: str) -> np.ndarray:
+    def load_audio(self, file_path: str) -> Tuple[np.ndarray, int]:
         """
-        Load audio file and resample if necessary.
+        Load audio file and resample to target sample rate.
         
         Args:
-            file_path: Path to audio file
+            file_path: Path to the audio file
             
         Returns:
-            Audio signal as numpy array
+            Tuple of (audio_data, sample_rate)
         """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Audio file not found: {file_path}")
+            
         audio, sr = librosa.load(file_path, sr=self.sample_rate)
+        return audio, sr
+    
+    def load_keyword_template(self, file_path: str) -> np.ndarray:
+        """
+        Load and process keyword template audio.
+        
+        Args:
+            file_path: Path to the keyword audio file
+            
+        Returns:
+            Processed keyword template
+        """
+        audio, _ = self.load_audio(file_path)
         return audio
     
-    def prepare_dataset(self, 
-                       data_dir: str,
-                       train_ratio: float = 0.8,
-                       val_ratio: float = 0.1) -> None:
+    def load_test_audio(self, file_path: str) -> np.ndarray:
         """
-        Prepare dataset by splitting into train/val/test sets.
+        Load and process test audio file.
         
         Args:
-            data_dir: Directory containing raw audio files
-            train_ratio: Ratio of training data
-            val_ratio: Ratio of validation data
+            file_path: Path to the test audio file
+            
+        Returns:
+            Processed test audio
         """
-        # Create output directories
-        os.makedirs(os.path.join(data_dir, 'train'), exist_ok=True)
-        os.makedirs(os.path.join(data_dir, 'val'), exist_ok=True)
-        os.makedirs(os.path.join(data_dir, 'test'), exist_ok=True)
+        audio, _ = self.load_audio(file_path)
+        return audio
+
+class DataLoader:
+    def __init__(self, data_dir='data'):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(exist_ok=True)
         
-        # Process each keyword directory
-        for keyword in os.listdir(data_dir):
-            keyword_dir = os.path.join(data_dir, keyword)
-            if os.path.isdir(keyword_dir) and keyword not in ['train', 'val', 'test']:
-                # Get all audio files
-                audio_files = [f for f in os.listdir(keyword_dir) 
-                             if f.endswith('.wav')]
-                
-                # Shuffle files
-                np.random.shuffle(audio_files)
-                
-                # Calculate split indices
-                n_files = len(audio_files)
-                n_train = int(n_files * train_ratio)
-                n_val = int(n_files * val_ratio)
-                
-                # Split files
-                train_files = audio_files[:n_train]
-                val_files = audio_files[n_train:n_train + n_val]
-                test_files = audio_files[n_train + n_val:]
-                
-                # Create keyword directories
-                for split in ['train', 'val', 'test']:
-                    os.makedirs(os.path.join(data_dir, split, keyword), 
-                              exist_ok=True)
-                
-                # Copy files to respective directories
-                for files, split in [(train_files, 'train'),
-                                   (val_files, 'val'),
-                                   (test_files, 'test')]:
-                    for file in tqdm(files, desc=f'Copying {split} files'):
-                        src = os.path.join(keyword_dir, file)
-                        dst = os.path.join(data_dir, split, keyword, file)
-                        shutil.copy2(src, dst)
-                
-                # Remove original directory
-                shutil.rmtree(keyword_dir)
-    
-    def download_dataset(self, output_dir: str) -> None:
-        """
-        Download TensorFlow Speech Commands dataset.
+    def download_dataset(self):
+        """Download the Speech Commands dataset using TensorFlow."""
+        print("Checking for existing dataset...")
         
-        Args:
-            output_dir: Directory to save the dataset
-        """
-        import kaggle
+        # Define the dataset URL and local paths
+        dataset_url = "https://storage.googleapis.com/download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
+        tar_path = self.data_dir / "speech_commands_v0.02.tar.gz"
+        extract_path = self.data_dir
         
-        # Create output directory
-        os.makedirs(output_dir, exist_ok=True)
+        # Check if dataset is already extracted
+        required_dirs = ['down', 'go', 'left', 'no', 'right', 'stop', 'up', 'yes']
+        dataset_exists = all((extract_path / dir_name).exists() for dir_name in required_dirs)
         
-        # Download dataset
-        print("Downloading dataset...")
-        kaggle.api.competition_download_files(
-            'tensorflow-speech-recognition-challenge',
-            path=output_dir
+        if dataset_exists:
+            print("Dataset already exists and extracted. Skipping download...")
+        else:
+            print("Downloading Speech Commands dataset...")
+            
+            # Download the file with progress bar if it doesn't exist
+            if not tar_path.exists():
+                print(f"Downloading from {dataset_url}")
+                response = requests.get(dataset_url, stream=True)
+                total_size = int(response.headers.get('content-length', 0))
+                
+                with open(tar_path, 'wb') as f, tqdm(
+                    desc="Downloading",
+                    total=total_size,
+                    unit='iB',
+                    unit_scale=True,
+                    unit_divisor=1024,
+                ) as pbar:
+                    for data in response.iter_content(chunk_size=1024):
+                        size = f.write(data)
+                        pbar.update(size)
+            
+            # Extract the dataset if not already extracted
+            if not dataset_exists:
+                print("Extracting dataset...")
+                with tarfile.open(tar_path, 'r:gz') as tar:
+                    tar.extractall(path=extract_path)
+        
+        # Get the class names
+        label_names = np.array(['down', 'go', 'left', 'no', 'right', 'stop', 'up', 'yes'])
+        print("Available commands:", label_names)
+        
+        # Create dataset from the downloaded files
+        train_ds = tf.keras.utils.audio_dataset_from_directory(
+            directory=str(extract_path),
+            batch_size=64,
+            validation_split=0.2,
+            seed=0,
+            output_sequence_length=16000,
+            subset='training'
         )
         
-        # Extract files
-        print("Extracting files...")
-        import zipfile
-        with zipfile.ZipFile(
-            os.path.join(output_dir, 'train.7z'), 'r'
-        ) as zip_ref:
-            zip_ref.extractall(output_dir)
+        val_ds = tf.keras.utils.audio_dataset_from_directory(
+            directory=str(extract_path),
+            batch_size=64,
+            validation_split=0.2,
+            seed=0,
+            output_sequence_length=16000,
+            subset='validation'
+        )
         
-        # Prepare dataset
-        print("Preparing dataset...")
-        self.prepare_dataset(output_dir)
-
-def main():
-    import argparse
+        return train_ds, val_ds, label_names
     
-    parser = argparse.ArgumentParser(description='Prepare KWS dataset')
-    parser.add_argument('--output_dir', type=str, default='data',
-                      help='Directory to save the dataset')
-    parser.add_argument('--download', action='store_true',
-                      help='Download dataset from Kaggle')
+    def load_audio_file(self, file_path):
+        """Load and preprocess a single audio file."""
+        # Read the audio file
+        audio = tf.io.read_file(file_path)
+        audio, _ = tf.audio.decode_wav(audio)
+        
+        # Convert to mono if stereo
+        if len(audio.shape) > 1:
+            audio = tf.reduce_mean(audio, axis=1)
+        
+        return audio
     
-    args = parser.parse_args()
-    
-    data_loader = AudioDataLoader()
-    
-    if args.download:
-        data_loader.download_dataset(args.output_dir)
-    else:
-        data_loader.prepare_dataset(args.output_dir)
-    
-    print("Dataset preparation completed.")
-
-if __name__ == "__main__":
-    main()
+    def get_dataset_info(self):
+        """Get information about the downloaded dataset."""
+        try:
+            train_ds, val_ds, label_names = self.download_dataset()
+            
+            # Get the actual class names from the dataset
+            actual_labels = train_ds.class_names
+            
+            return {
+                'total_classes': len(actual_labels),
+                'classes': actual_labels,
+                'training_samples': len(list(train_ds)),
+                'validation_samples': len(list(val_ds))
+            }
+        except Exception as e:
+            return f"Error getting dataset info: {str(e)}"
