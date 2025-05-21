@@ -2,6 +2,8 @@ import os
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
+from pathlib import Path
+import matplotlib.pyplot as plt
 from .model import KWSSystem
 from .feature_extraction import FeatureExtractor
 from .data_loader import AudioDataLoader
@@ -26,18 +28,27 @@ def create_dataset(data_dir: str,
     audio_files = []
     labels = []
     
+    # Convert to Path object
+    data_dir = Path(data_dir)
+    
     # Load audio files and labels
-    for label in os.listdir(data_dir):
-        label_dir = os.path.join(data_dir, label)
-        if os.path.isdir(label_dir):
-            for audio_file in os.listdir(label_dir):
-                if audio_file.endswith('.wav'):
-                    audio_files.append(os.path.join(label_dir, audio_file))
-                    labels.append(label)
+    for label_dir in data_dir.iterdir():
+        if label_dir.is_dir():
+            for audio_file in label_dir.glob('*.wav'):
+                if audio_file.exists():
+                    audio_files.append(str(audio_file))
+                    labels.append(label_dir.name)
+    
+    print(f"Found {len(audio_files)} audio files in {data_dir}")
     
     # Create dataset
     def load_and_extract_features(audio_path, label):
-        audio = data_loader.load_audio(audio_path)
+        # Convert EagerTensor to Python string
+        if hasattr(audio_path, 'numpy'):
+            audio_path = audio_path.numpy().decode('utf-8')
+        if hasattr(label, 'numpy'):
+            label = label.numpy().decode('utf-8')
+        audio, _ = data_loader.load_audio(audio_path)  # Unpack the tuple
         features = feature_extractor.extract_features(audio, feature_type)
         return features, label
     
@@ -57,6 +68,38 @@ def create_dataset(data_dir: str,
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     
     return dataset
+
+def plot_training_history(history, save_path='training_history.png'):
+    """
+    Plot training and validation metrics.
+    
+    Args:
+        history: Training history object
+        save_path: Path to save the plot
+    """
+    plt.figure(figsize=(12, 4))
+    
+    # Plot accuracy
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.title('Model Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    
+    # Plot loss
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title('Model Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
 
 def train_model(data_dir: str,
                 model_type: str = 'cnn',
@@ -79,17 +122,21 @@ def train_model(data_dir: str,
     feature_extractor = FeatureExtractor()
     
     # Create datasets
-    train_dir = os.path.join(data_dir, 'train')
-    val_dir = os.path.join(data_dir, 'val')
+    data_dir = Path(data_dir)
+    train_dir = data_dir / 'train'
+    val_dir = data_dir / 'val'
     
+    print(f"Loading training data from {train_dir}")
     train_dataset = create_dataset(
-        train_dir,
+        str(train_dir),
         feature_extractor,
         batch_size,
         feature_type
     )
+    
+    print(f"Loading validation data from {val_dir}")
     val_dataset = create_dataset(
-        val_dir,
+        str(val_dir),
         feature_extractor,
         batch_size,
         feature_type
@@ -109,9 +156,14 @@ def train_model(data_dir: str,
         batch_size=batch_size
     )
     
-    # Save model
+    # Create models directory if it doesn't exist
     os.makedirs('models', exist_ok=True)
+    
+    # Save model
     kws.save_model('models/kws_model.h5')
+    
+    # Plot and save training history
+    plot_training_history(history, 'models/training_history.png')
     
     return history
 

@@ -26,6 +26,10 @@ class FeatureExtractor:
         Returns:
             Preprocessed audio signal
         """
+        # Convert stereo to mono if necessary
+        if len(audio.shape) > 1 and audio.shape[1] == 2:
+            audio = np.mean(audio, axis=1)
+        
         # Bandpass filter (300Hz - 3000Hz)
         nyquist = self.sample_rate / 2
         low = 300 / nyquist

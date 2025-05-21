@@ -23,10 +23,16 @@ class AudioDataLoader:
         Returns:
             Tuple of (audio_data, sample_rate)
         """
-        if not os.path.exists(file_path):
+        # Convert to Path object and resolve to absolute path
+        file_path = Path(file_path).resolve()
+        
+        if not file_path.exists():
             raise FileNotFoundError(f"Audio file not found: {file_path}")
             
-        audio, sr = librosa.load(file_path, sr=self.sample_rate)
+        audio, sr = librosa.load(str(file_path), sr=self.sample_rate, mono=True)
+        # Ensure mono
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=0)
         return audio, sr
     
     def load_keyword_template(self, file_path: str) -> np.ndarray:
