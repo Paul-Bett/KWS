@@ -99,7 +99,7 @@ kaggle competitions download -c tensorflow-speech-recognition-challenge
 3. **Run Live Demo**
    ```bash
    python -m src.live_demo
-   ```
+```
 
 ## Model Architecture
 
