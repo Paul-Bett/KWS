@@ -1,7 +1,8 @@
 # Data directory
 data/
 data/*
-
+venv/
+src/_pycache_/
 # Virtual Environment
 venv/
 env/
