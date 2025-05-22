@@ -168,10 +168,20 @@ The LSTM model architecture consists of:
 
 The model training process includes:
 1. Feature extraction (MFCC or mel spectrogram)
+   - Window size: 30ms
+   - Overlap: 25%
+   - Number of MFCCs: 13
+   - Maximum frames: 100
 2. Model training with early stopping
-3. Learning rate reduction on plateau
-4. Model evaluation on validation set
-5. Feature scaling for improved performance
+   - Batch size: 32
+   - Epochs: 20
+   - Learning rate: 0.001
+   - Optimizer: Adam
+   - Loss: Categorical Cross-entropy
+3. Model evaluation on validation set
+   - Validation split: 20% of training data
+   - Test split: 10% of total data
+4. Feature scaling for improved model performance
 
 Note: While data augmentation (time shifting, noise addition) is a common practice in speech recognition, it was not implemented in this version of the model. Future improvements could include:
 - Time shifting for temporal invariance
@@ -183,11 +193,13 @@ Note: While data augmentation (time shifting, noise addition) is a common practi
 ## Evaluation
 
 The system is evaluated using:
-- Accuracy
-- Confusion matrix
-- False Acceptance Rate (FAR)
-- False Rejection Rate (FRR)
-- Real-time performance metrics
+- Accuracy (achieved ~90% on test set)
+- Training and validation loss curves
+- Per-class prediction probabilities
+- Real-time performance metrics:
+  - Inference time per sample
+  - Memory usage
+  - CPU/GPU utilization
 
 ## Real-time Processing
 
