@@ -167,12 +167,18 @@ The LSTM model architecture consists of:
 ## Training
 
 The model training process includes:
-1. Data augmentation (time shifting, noise addition)
-2. Feature extraction (MFCC or mel spectrogram)
-3. Model training with early stopping
-4. Learning rate reduction on plateau
-5. Model evaluation on validation set
-6. Feature scaling for improved performance
+1. Feature extraction (MFCC or mel spectrogram)
+2. Model training with early stopping
+3. Learning rate reduction on plateau
+4. Model evaluation on validation set
+5. Feature scaling for improved performance
+
+Note: While data augmentation (time shifting, noise addition) is a common practice in speech recognition, it was not implemented in this version of the model. Future improvements could include:
+- Time shifting for temporal invariance
+- Noise addition for robustness
+- Speed perturbation
+- Pitch shifting
+- Volume adjustment
 
 ## Evaluation
 
