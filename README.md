@@ -123,17 +123,26 @@ pip install -r requirements.txt
 ### CNN Model
 ```python
 model = tf.keras.Sequential([
-    tf.keras.layers.Conv2D(64, (3, 3), activation='relu', input_shape=input_shape),
+    # First convolutional block
+    tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
     tf.keras.layers.MaxPooling2D((2, 2)),
-    tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
+    
+    # Second convolutional block
+    tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
     tf.keras.layers.MaxPooling2D((2, 2)),
-    tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
+    
+    # Classification layers
     tf.keras.layers.Flatten(),
     tf.keras.layers.Dense(128, activation='relu'),
-    tf.keras.layers.Dropout(0.5),
     tf.keras.layers.Dense(num_classes, activation='softmax')
 ])
 ```
+
+The CNN model architecture consists of:
+- Two convolutional blocks with increasing filters (32 → 64)
+- MaxPooling layers after each convolutional block
+- A dense layer with 128 units and ReLU activation
+- Final softmax layer for classification
 
 ### LSTM Model
 ```python
@@ -144,7 +153,16 @@ x = tf.keras.layers.GlobalAveragePooling1D()(x)
 x = tf.keras.layers.Dense(64, activation='relu')(x)
 x = tf.keras.layers.Dropout(0.5)(x)
 outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+model = tf.keras.Model(inputs=inputs, outputs=outputs)
 ```
+
+The LSTM model architecture consists of:
+- A bidirectional LSTM layer with 128 units
+- Self-attention mechanism for capturing temporal dependencies
+- Global average pooling to reduce sequence length
+- A dense layer with 64 units and ReLU activation
+- Dropout layer (0.5) for regularization
+- Final softmax layer for classification
 
 ## Training
 
