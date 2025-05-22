@@ -12,7 +12,10 @@ keyword-spotting/
 │   └── test/                # Test audio files
 ├── models/                   # Saved model files
 │   └── keyword_spotting_mfcc_30ms_25ol.h5  # Trained model
-├── notebooks/                # Exploratory analysis
+├── notebooks/                # Jupyter notebooks
+│   ├── KWS_Training_mfcc_30ms_25ol.ipynb           # Main training notebook
+│   ├── KWS_Training_Evaluation_Chaging_Parameters.ipynb  # Parameter evaluation
+│   ├── kws_training.ipynb   # Initial training experiments
 │   ├── data_exploration.ipynb    # Audio data analysis
 │   └── parameter_tuning.ipynb    # System parameter optimization
 ├── src/                      # Source code
@@ -23,10 +26,15 @@ keyword-spotting/
 │   ├── evaluate.py          # Model evaluation script
 │   ├── live_demo.py         # Real-time demonstration
 │   ├── test_model.py        # Test script for model evaluation
+│   ├── create_scaler.py     # Feature scaler creation
+│   ├── test_mic.py          # Microphone test utility
 │   └── __init__.py          # Package initialization
 ├── tests/                    # Unit tests
+├── download_dataset.py       # Dataset download script
+├── prepare_dataset.py        # Dataset preparation script
+├── requirements.txt          # Dependencies
 ├── README.md                 # Project documentation
-└── requirements.txt          # Dependencies
+└── .gitignore               # Git ignore file
 ```
 
 ## Features
