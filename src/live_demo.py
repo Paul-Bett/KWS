@@ -1,162 +1,185 @@
 import numpy as np
 import sounddevice as sd
-import time
 import tensorflow as tf
-from model import KWSSystem
+import librosa
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import queue
 import threading
-import librosa
-from sklearn.preprocessing import StandardScaler
-import joblib
+import time
+from pathlib import Path
+from collections import deque
 
-# Global variables for audio processing
+# Define the label mapping
+keywords = ['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+label_map = {k: i for i, k in enumerate(keywords)}
+
+# Audio parameters
+SAMPLE_RATE = 16000
+CHANNELS = 1
+DURATION = 0.5  # Reduced duration for faster response
+OVERLAP = 0.25  # Reduced overlap
+
+# Feature extraction parameters
+WIN_MS = 30
+OVERLAP_PERC = 0.25
+MAX_FRAMES = 100  # Match training value
+
+# Detection parameters
+CONFIDENCE_THRESHOLD = 0.3  # Lowered threshold
+SMOOTHING_WINDOW = 3  # Number of consecutive detections required
+
+# Create queues and buffers
 audio_queue = queue.Queue()
-is_recording = False
+detection_buffer = deque(maxlen=SMOOTHING_WINDOW)
+last_detection = None
+last_detection_time = 0
+DETECTION_COOLDOWN = 1.0  # Minimum time between detections in seconds
 
-def capture_audio(duration: float = 1.0, sample_rate: int = 16000) -> np.ndarray:
-    """
-    Capture audio from microphone.
+def extract_features(audio_data, sr=SAMPLE_RATE, feature_type='mfcc', win_ms=30, overlap=0.25):
+    # Calculate window and hop length
+    win_length = int(win_ms * sr / 1000)
+    hop_length = int(win_length * (1 - overlap))
     
-    Args:
-        duration: Recording duration in seconds
-        sample_rate: Audio sampling rate
-        
-    Returns:
-        Recorded audio signal
-    """
-    print("Recording...")
-    audio = sd.rec(
-        int(duration * sample_rate),
-        samplerate=sample_rate,
-        channels=1,
-        dtype=np.float32
+    # Extract MFCC features
+    mfcc = librosa.feature.mfcc(
+        y=audio_data,
+        sr=sr,
+        n_mfcc=13,
+        n_fft=win_length,
+        hop_length=hop_length
     )
-    sd.wait()
-    print("Done recording")
-    return audio.flatten()
+    
+    # Transpose to get (time, features) format
+    mfcc = mfcc.T
+    
+    return mfcc
+
+def predict_keyword(features, model, max_frames=MAX_FRAMES):
+    try:
+        # Pad or truncate features to match the model's input shape
+        if features.shape[0] > max_frames:
+            features = features[:max_frames, :]
+        else:
+            pad_width = max_frames - features.shape[0]
+            features = np.pad(features, ((0, pad_width), (0, 0)), mode='constant')
+        
+        # Reshape for model input (batch_size, height, width, channels)
+        input_features = np.expand_dims(features, axis=0)  # Add batch dimension
+        input_features = np.expand_dims(input_features, axis=-1)  # Add channel dimension
+        
+        # Make prediction
+        predictions = model.predict(input_features, verbose=0)
+        predicted_class_index = np.argmax(predictions)
+        predicted_keyword = list(label_map.keys())[predicted_class_index]
+        
+        return predicted_keyword, predictions[0]
+    
+    except Exception as e:
+        print(f"Error in prediction: {e}")
+        return None, None
 
 def audio_callback(indata, frames, time, status):
-    """Callback for continuous audio stream."""
+    """Callback function for audio stream"""
     if status:
-        print(status)
+        print(f"Audio callback status: {status}")
     audio_queue.put(indata.copy())
 
-def extract_features(audio_data, feature_type='mfcc', win_ms=30, overlap_perc=0.25, sr=16000, n_mels=40):
-    win_len = int(sr * win_ms / 1000)
-    hop_len = int(win_len * (1 - overlap_perc))
-    if feature_type == 'mfcc':
-        mfcc = librosa.feature.mfcc(y=audio_data, sr=sr, n_fft=win_len, hop_length=hop_len, n_mfcc=13)
-        # Pad or truncate to match expected shape
-        if mfcc.shape[1] < 98:
-            pad_width = 98 - mfcc.shape[1]
-            mfcc = np.pad(mfcc, ((0, 0), (0, pad_width)), mode='constant')
-        else:
-            mfcc = mfcc[:, :98]
-        return mfcc
-    elif feature_type == 'mel':
-        mel = librosa.feature.melspectrogram(y=audio_data, sr=sr, n_fft=win_len, hop_length=hop_len, n_mels=n_mels)
-        mel_db = librosa.power_to_db(mel, ref=np.max)
-        return mel_db
-    else:
-        raise ValueError("Unknown feature type")
-
-def update_plot(frame, line, audio_data, kws, ax, scaler):
-    """Update the plot with new audio data and predictions."""
+def update_plot(frame):
+    """Update function for animation"""
+    global last_detection, last_detection_time
+    
     try:
         # Get audio data from queue
-        while not audio_queue.empty():
-            audio_data = audio_queue.get().flatten()
-        
-        # Update audio plot
-        x = np.arange(len(audio_data))
-        line.set_data(x, audio_data)
-        
-        # Extract features
-        features = extract_features(audio_data, feature_type='mfcc')
-        
-        # Normalize features using pre-fitted scaler
-        features_normalized = scaler.transform(features.T).T
-        
-        # Reshape for model input
-        features_reshaped = np.expand_dims(features_normalized, axis=0)
-        features_reshaped = np.expand_dims(features_reshaped, axis=-1)
-        
-        # Get prediction
-        detections = kws.predict(features_reshaped, threshold=0.3)
-        
-        # Update title with detection
-        if detections:
-            keyword = detections[0]['keyword']
-            confidence = detections[0]['confidence']
-            ax.set_title(f"Detected: {keyword} (confidence: {confidence:.2f})", color='green')
-            print(f"Detected keyword '{keyword}' with confidence {confidence:.2f}")
-        else:
-            ax.set_title("Listening...", color='blue')
-            print("Listening...")
-        return line,
+        if not audio_queue.empty():
+            audio_data = audio_queue.get()
+            audio_data = audio_data.flatten()  # Convert to 1D array
+            
+            # Extract features with exact same parameters as test model
+            features = extract_features(audio_data, sr=SAMPLE_RATE, win_ms=30, overlap=0.25)
+            
+            # Make prediction
+            predicted_keyword, predictions = predict_keyword(features, model)
+            
+            # Update plot
+            line.set_ydata(audio_data)
+            line.set_xdata(np.arange(len(audio_data)))
+            
+            # Update prediction text with smoothing
+            if predicted_keyword:
+                max_prob = np.max(predictions)
+                current_time = time.time()
+                
+                if max_prob > CONFIDENCE_THRESHOLD:
+                    detection_buffer.append(predicted_keyword)
+                    
+                    # Check if we have enough consistent detections
+                    if len(detection_buffer) == SMOOTHING_WINDOW and all(x == detection_buffer[0] for x in detection_buffer):
+                        # Check cooldown period
+                        if current_time - last_detection_time > DETECTION_COOLDOWN:
+                            last_detection = detection_buffer[0]
+                            last_detection_time = current_time
+                            text.set_text(f"Detected: {last_detection} ({max_prob:.2f})")
+                        else:
+                            text.set_text("Listening...")
+                    else:
+                        text.set_text("Listening...")
+                else:
+                    text.set_text("Listening...")
+            else:
+                text.set_text("Listening...")
+            
+            # Adjust plot limits
+            ax.relim()
+            ax.autoscale_view()
+            
+    except queue.Empty:
+        pass
     except Exception as e:
         print(f"Error in update_plot: {e}")
-        return line,
+    
+    return line, text
 
 def main():
-    # Initialize KWS system
-    kws = KWSSystem(
-        sample_rate=16000,
-        n_mels=40,
-        n_mfcc=13,
-        model_type='cnn'
-    )
+    global model, line, text, ax
     
-    # Load trained model
-    try:
-        kws.load_model('models/keyword_spotting_mfcc_30ms_25ol.h5')
-        print("Model loaded successfully!")
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return
+    # Load the model
+    model_path = 'models/keyword_spotting_mfcc_30ms_25ol.h5'
+    model = tf.keras.models.load_model(model_path)
+    print("Model loaded successfully!")
     
-    # Load pre-fitted scaler
-    try:
-        scaler = joblib.load('models/scaler.joblib')
-        print("Scaler loaded successfully!")
-    except Exception as e:
-        print(f"Error loading scaler: {e}")
-        return
-    
-    print("Starting keyword spotting...")
-    print("Press Ctrl+C to stop")
+    # Create figure and axis for plotting
+    fig, ax = plt.subplots(figsize=(10, 4))
+    line, = ax.plot([], [], lw=2)
+    text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
     
     # Set up the plot
-    plt.ion()
-    fig, ax = plt.subplots(figsize=(10, 4))
-    x = np.arange(16000)
-    audio_data = np.zeros(16000)
-    line, = ax.plot(x, audio_data, lw=2)
     ax.set_ylim(-1, 1)
-    ax.set_xlim(0, 16000)  # 1 second of audio at 16kHz
-    ax.set_title("Listening...")
-    ax.set_xlabel("Samples")
-    ax.set_ylabel("Amplitude")
+    ax.set_xlim(0, SAMPLE_RATE * DURATION)
+    ax.set_xlabel('Sample')
+    ax.set_ylabel('Amplitude')
+    ax.set_title('Real-time Keyword Spotting')
+    ax.grid(True)
     
-    try:
-        # Start audio stream
-        with sd.InputStream(callback=audio_callback,
-                          channels=1,
-                          samplerate=16000,
-                          blocksize=16000):
-            # Create animation
-            ani = FuncAnimation(fig, update_plot, fargs=(line, audio_data, kws, ax, scaler),
-                              interval=100, blit=True)
-            plt.show()
-            
-    except KeyboardInterrupt:
-        print("\nStopping...")
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        plt.close()
+    # Start audio stream
+    print("Starting audio stream...")
+    stream = sd.InputStream(
+        channels=CHANNELS,
+        samplerate=SAMPLE_RATE,
+        blocksize=int(SAMPLE_RATE * DURATION),
+        callback=audio_callback
+    )
+    
+    with stream:
+        print("Listening for keywords...")
+        print("Press Ctrl+C to stop")
+        
+        # Start animation
+        ani = FuncAnimation(
+            fig, update_plot, interval=100,
+            blit=True
+        )
+        plt.show()
 
 if __name__ == "__main__":
     main()

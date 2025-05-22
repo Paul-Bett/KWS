@@ -1,82 +1,95 @@
 import numpy as np
+import tensorflow as tf
 import librosa
-from model import KWSSystem
-from sklearn.preprocessing import StandardScaler
+import os
+from pathlib import Path
+import random
 
-def extract_features(audio_data, feature_type='mfcc', win_ms=30, overlap_perc=0.25, sr=16000, n_mels=40):
-    win_len = int(sr * win_ms / 1000)
-    hop_len = int(win_len * (1 - overlap_perc))
-    if feature_type == 'mfcc':
-        mfcc = librosa.feature.mfcc(y=audio_data, sr=sr, n_fft=win_len, hop_length=hop_len, n_mfcc=13)
-        # Pad or truncate to match expected shape
-        if mfcc.shape[1] < 98:
-            pad_width = 98 - mfcc.shape[1]
-            mfcc = np.pad(mfcc, ((0, 0), (0, pad_width)), mode='constant')
+# Define the label mapping
+keywords = ['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+label_map = {k: i for i, k in enumerate(keywords)}
+
+# Function to extract features from audio file
+def extract_features(audio_file, feature_type='mfcc', win_ms=30, overlap=0.25):
+    # Load audio file
+    audio_data, sr = librosa.load(audio_file, sr=16000)
+    
+    # Calculate window and hop length
+    win_length = int(win_ms * sr / 1000)
+    hop_length = int(win_length * (1 - overlap))
+    
+    # Extract MFCC features
+    mfcc = librosa.feature.mfcc(
+        y=audio_data,
+        sr=sr,
+        n_mfcc=13,
+        n_fft=win_length,
+        hop_length=hop_length
+    )
+    
+    # Transpose to get (time, features) format
+    mfcc = mfcc.T
+    
+    return mfcc
+
+# Function to make a prediction on a single audio file
+def predict_keyword(audio_file_path, model, feature_type='mfcc', win_ms=30, overlap=0.25, max_frames=100):
+    try:
+        # Extract features from the audio file
+        features = extract_features(audio_file_path, feature_type, win_ms, overlap)
+        print(f"\nFeature extraction shapes:")
+        print(f"1. Raw MFCC shape: {features.shape}")
+        
+        # Pad or truncate features to match the model's input shape
+        if features.shape[0] > max_frames:
+            features = features[:max_frames, :]
         else:
-            mfcc = mfcc[:, :98]
-        return mfcc
-    elif feature_type == 'mel':
-        mel = librosa.feature.melspectrogram(y=audio_data, sr=sr, n_fft=win_len, hop_length=hop_len, n_mels=n_mels)
-        mel_db = librosa.power_to_db(mel, ref=np.max)
-        return mel_db
-    else:
-        raise ValueError("Unknown feature type")
+            pad_width = max_frames - features.shape[0]
+            features = np.pad(features, ((0, pad_width), (0, 0)), mode='constant')
+        print(f"2. After padding/truncating: {features.shape}")
+        
+        # Reshape for model input (batch_size, height, width, channels)
+        input_features = np.expand_dims(features, axis=0)  # Add batch dimension
+        input_features = np.expand_dims(input_features, axis=-1)  # Add channel dimension
+        print(f"3. Final input shape: {input_features.shape}")
+        
+        # Make prediction
+        predictions = model.predict(input_features)
+        predicted_class_index = np.argmax(predictions)
+        predicted_keyword = list(label_map.keys())[predicted_class_index]
+        
+        return predicted_keyword, predictions[0]
+    
+    except Exception as e:
+        print(f"Error processing {audio_file_path}: {e}")
+        return None, None
 
 def main():
-    # Initialize KWS system
-    kws = KWSSystem(sample_rate=16000, n_mels=40, n_mfcc=13, model_type='cnn')
-    # Load trained model
-    kws.load_model('models/keyword_spotting_mfcc_30ms_25ol.h5')
+    # Load the model
+    model_path = 'models/keyword_spotting_mfcc_30ms_25ol.h5'
+    model = tf.keras.models.load_model(model_path)
+    model.summary()
     
-    # Print model summary
-    print("\nModel Summary:")
-    kws.model.summary()
+    # Use a specific 'down' file from test set
+    test_file = 'data/test/down/5c8af87a_nohash_0.wav'
+    true_label = 'down'
     
-    # Load a test audio file
-    audio_file = 'data/train/up/0a7c2a8d_nohash_0.wav'
-    audio_data, sr = librosa.load(audio_file, sr=16000)
-    print(f"\nAudio data shape: {audio_data.shape}")
+    print(f"\n🚀 Testing on file: {test_file}")
+    print(f"True label: {true_label}")
     
-    # Extract features
-    features = extract_features(audio_data, feature_type='mfcc')
-    print(f"Extracted features shape: {features.shape}")
-    print(f"Extracted features (first 5 values): {features[:, :5]}")
+    # Make prediction
+    predicted_keyword, predictions = predict_keyword(test_file, model)
     
-    # Normalize features
-    scaler = StandardScaler()
-    features_normalized = scaler.fit_transform(features.T).T
-    print(f"Normalized features (first 5 values): {features_normalized[:, :5]}")
-    
-    # Reshape features for model input
-    features_reshaped = np.expand_dims(features_normalized, axis=0)
-    features_reshaped = np.expand_dims(features_reshaped, axis=-1)
-    print(f"\nReshaped features shape: {features_reshaped.shape}")
-    
-    # Get raw predictions
-    raw_predictions = kws.model.predict(features_reshaped)
-    print(f"\nRaw predictions shape: {raw_predictions.shape}")
-    print(f"Raw predictions: {raw_predictions}")
-
-    # Print max probability and its class
-    max_idx = np.argmax(raw_predictions[0])
-    max_prob = raw_predictions[0][max_idx]
-    class_names = ['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
-    print(f"\nMax probability: {max_prob:.4f} for class: '{class_names[max_idx]}' (index {max_idx})")
-    
-    # Print all classes above threshold
-    print(f"\nClasses above threshold {0.1}:")
-    for idx, prob in enumerate(raw_predictions[0]):
-        if prob > 0.1:
-            print(f"  Class '{class_names[idx]}' (index {idx}): {prob:.4f}")
-
-    # Get prediction with threshold
-    detections = kws.predict(features_normalized, threshold=0.3)
-    if detections:
-        keyword = detections[0]['keyword']
-        confidence = detections[0]['confidence']
-        print(f"\nDetected keyword '{keyword}' with confidence {confidence:.2f}")
+    if predicted_keyword:
+        print(f"Predicted keyword: {predicted_keyword}")
+        print(f"Prediction probabilities: {predictions}")
+        # Map probabilities to keywords
+        prob_dict = {kw: prob for kw, prob in zip(label_map.keys(), predictions)}
+        print("\nProbabilities per keyword:")
+        for kw, prob in prob_dict.items():
+            print(f"  {kw}: {prob:.4f}")
     else:
-        print("\nNo keyword detected.")
+        print("Failed to make prediction.")
 
 if __name__ == "__main__":
     main() 
