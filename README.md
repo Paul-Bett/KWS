@@ -40,36 +40,70 @@ keyword-spotting/
   - Audio normalization for consistent signal levels
   - Voice Activity Detection (VAD) for real-time processing
 
-- **Feature Extraction**
-  - Mel spectrogram computation with configurable parameters
-  - MFCC extraction with customizable coefficients
-  - Configurable window size and overlap
+## Updates and Best Practices
 
-- **Real-time Processing**
-  - Live audio capture from microphone
-  - Low-latency inference
-  - Configurable detection threshold
-  - Support for multiple keywords
+### 1. **Label Mapping Consistency**
+- The label order used for training and inference must match exactly.
+- The correct label order is:
+  ```python
+  keywords = ['yes', 'no', 'up', 'down', 'left', 'right', 'on', 'off', 'stop', 'go']
+  label_map = {k: i for i, k in enumerate(keywords)}
+  ```
+- Both `src/test_model.py` and `src/live_demo.py` have been updated to use this order.
+
+### 2. **Feature Extraction Parameters**
+- Ensure the following parameters are used for both training and inference:
+  - `win_ms = 30` (window size in ms)
+  - `overlap = 0.25` (25% overlap)
+  - `n_mfcc = 13` (number of MFCCs)
+  - `max_frames = 100` (time frames, pad/truncate as needed)
+- Both test and live demo scripts have been updated to use these values.
+
+### 3. **Audio Preprocessing**
+- The training pipeline applies a bandpass filter (300Hz-3000Hz) and normalization before feature extraction.
+- The same preprocessing is now applied in both `src/test_model.py` and `src/live_demo.py` for consistent results.
+
+### 4. **Troubleshooting Model Predictions**
+- If the model predicts the wrong keyword with high confidence:
+  - Double-check label order in all scripts.
+  - Ensure feature extraction parameters match training.
+  - Confirm that audio preprocessing (bandpass filter and normalization) is applied before MFCC extraction.
+  - If issues persist, verify the model file matches the training configuration.
+
+## Running the Test Script
+
+To test the model on a specific audio file:
+```bash
+python src/test_model.py
+```
+- The script will print the true label, predicted keyword, and class probabilities.
+
+## Running the Live Demo
+
+To run the real-time keyword spotting demo:
+```bash
+python src/live_demo.py
+```
+- Speak one of the supported keywords into your microphone.
+- The detected keyword and confidence will be displayed in real time.
 
 ## Requirements
+- Python 3.7+
+- TensorFlow 2.x
+- librosa
+- sounddevice
+- scikit-learn
+- matplotlib
+- joblib
 
-Install the required packages:
-
+Install dependencies with:
 ```bash
 pip install -r requirements.txt
 ```
 
-Required packages:
-- numpy>=1.19.2
-- librosa>=0.8.0
-- scipy>=1.6.0
-- scikit-learn>=0.24.0
-- soundfile>=0.10.3
-- matplotlib>=3.3.0
-- tensorflow>=2.8.0
-- sounddevice>=0.4.4
-- pandas>=1.3.0
-- tqdm>=4.62.0
+---
+
+For further troubleshooting or questions, please consult the code comments or open an issue.
 
 ## Dataset
 
