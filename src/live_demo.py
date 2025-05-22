@@ -26,10 +26,10 @@ OVERLAP_PERC = 0.25
 MAX_FRAMES = 100  # Match training value
 
 # Detection parameters
-CONFIDENCE_THRESHOLD = 0.5  # Increased from 0.2
-SMOOTHING_WINDOW = 3  # Increased from 2
-DETECTION_COOLDOWN = 0.5
-AUDIO_THRESHOLD = 0.1  # Minimum audio level to process
+CONFIDENCE_THRESHOLD = 0.2  # Lowered from 0.3
+SMOOTHING_WINDOW = 2  # Reduced from 3
+DETECTION_COOLDOWN = 0.5  # Reduced from 1.0
+AUDIO_THRESHOLD = 0.05  # Lowered audio threshold
 
 # Create queues and buffers
 audio_queue = queue.Queue()
@@ -136,11 +136,11 @@ def update_plot(frame):
                             print(f"\nDetected: {last_detection} ({max_prob:.2f})")
                             text.set_text(f"Detected: {last_detection} ({max_prob:.2f})")
                         else:
-                            text.set_text("Listening... (cooldown)")
+                            text.set_text("Listening...")
                     else:
                         text.set_text("Listening...")
                 else:
-                    text.set_text("Listening... (low confidence)")
+                    text.set_text("Listening...")
             else:
                 text.set_text("Listening...")
             
