@@ -8,6 +8,8 @@ from matplotlib.animation import FuncAnimation
 import queue
 import threading
 import librosa
+from sklearn.preprocessing import StandardScaler
+import joblib
 
 # Global variables for audio processing
 audio_queue = queue.Queue()
@@ -39,7 +41,6 @@ def audio_callback(indata, frames, time, status):
     """Callback for continuous audio stream."""
     if status:
         print(status)
-    print(f"audio_callback: received {indata.shape} samples")
     audio_queue.put(indata.copy())
 
 def extract_features(audio_data, feature_type='mfcc', win_ms=30, overlap_perc=0.25, sr=16000, n_mels=40):
@@ -47,6 +48,12 @@ def extract_features(audio_data, feature_type='mfcc', win_ms=30, overlap_perc=0.
     hop_len = int(win_len * (1 - overlap_perc))
     if feature_type == 'mfcc':
         mfcc = librosa.feature.mfcc(y=audio_data, sr=sr, n_fft=win_len, hop_length=hop_len, n_mfcc=13)
+        # Pad or truncate to match expected shape
+        if mfcc.shape[1] < 98:
+            pad_width = 98 - mfcc.shape[1]
+            mfcc = np.pad(mfcc, ((0, 0), (0, pad_width)), mode='constant')
+        else:
+            mfcc = mfcc[:, :98]
         return mfcc
     elif feature_type == 'mel':
         mel = librosa.feature.melspectrogram(y=audio_data, sr=sr, n_fft=win_len, hop_length=hop_len, n_mels=n_mels)
@@ -55,19 +62,30 @@ def extract_features(audio_data, feature_type='mfcc', win_ms=30, overlap_perc=0.
     else:
         raise ValueError("Unknown feature type")
 
-def update_plot(frame, line, audio_data, kws, ax):
+def update_plot(frame, line, audio_data, kws, ax, scaler):
     """Update the plot with new audio data and predictions."""
     try:
         # Get audio data from queue
         while not audio_queue.empty():
             audio_data = audio_queue.get().flatten()
+        
         # Update audio plot
         x = np.arange(len(audio_data))
         line.set_data(x, audio_data)
-        # Extract features using a sliding window
+        
+        # Extract features
         features = extract_features(audio_data, feature_type='mfcc')
+        
+        # Normalize features using pre-fitted scaler
+        features_normalized = scaler.transform(features.T).T
+        
+        # Reshape for model input
+        features_reshaped = np.expand_dims(features_normalized, axis=0)
+        features_reshaped = np.expand_dims(features_reshaped, axis=-1)
+        
         # Get prediction
-        detections = kws.predict(features, threshold=0.3)
+        detections = kws.predict(features_reshaped, threshold=0.3)
+        
         # Update title with detection
         if detections:
             keyword = detections[0]['keyword']
@@ -99,6 +117,14 @@ def main():
         print(f"Error loading model: {e}")
         return
     
+    # Load pre-fitted scaler
+    try:
+        scaler = joblib.load('models/scaler.joblib')
+        print("Scaler loaded successfully!")
+    except Exception as e:
+        print(f"Error loading scaler: {e}")
+        return
+    
     print("Starting keyword spotting...")
     print("Press Ctrl+C to stop")
     
@@ -119,23 +145,18 @@ def main():
         with sd.InputStream(callback=audio_callback,
                           channels=1,
                           samplerate=16000,
-                          blocksize=16000,
-                          device=5):
-            
+                          blocksize=16000):
             # Create animation
-            ani = FuncAnimation(fig, update_plot,
-                              fargs=(line, audio_data, kws, ax),
-                              interval=100,
-                              blit=True)
-            
-            plt.show(block=True)
+            ani = FuncAnimation(fig, update_plot, fargs=(line, audio_data, kws, ax, scaler),
+                              interval=100, blit=True)
+            plt.show()
             
     except KeyboardInterrupt:
-        print("\nStopping keyword spotting")
+        print("\nStopping...")
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        plt.close('all')
+        plt.close()
 
 if __name__ == "__main__":
     main()
