@@ -4,9 +4,9 @@ import tensorflow as tf
 from tqdm import tqdm
 from pathlib import Path
 import matplotlib.pyplot as plt
-from .model import KWSSystem
-from .feature_extraction import FeatureExtractor
-from .data_loader import AudioDataLoader
+from model import KWSSystem
+from feature_extraction import FeatureExtractor
+from data_loader import AudioDataLoader
 
 def create_dataset(data_dir: str, 
                   feature_extractor: FeatureExtractor,

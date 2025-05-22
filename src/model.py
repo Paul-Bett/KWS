@@ -1,7 +1,8 @@
-import numpy as np
 import tensorflow as tf
+from tensorflow.keras import layers, models
+import numpy as np
 from typing import List, Dict, Tuple, Optional
-from .feature_extraction import FeatureExtractor
+from feature_extraction import FeatureExtractor
 
 class KWSSystem:
     def __init__(self, 
