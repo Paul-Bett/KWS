@@ -43,11 +43,13 @@ keyword-spotting/
   - CNN architecture with multiple convolutional layers
   - LSTM architecture with attention mechanism
   - Support for both MFCC and mel spectrogram features
+  - Pre-trained model with MFCC features (30ms window, 25% overlap)
 
 - **Audio Preprocessing**
   - Bandpass filtering (300Hz - 3000Hz) for speech enhancement
   - Audio normalization for consistent signal levels
   - Voice Activity Detection (VAD) for real-time processing
+  - Feature scaling for improved model performance
 
 ## Updates and Best Practices
 
@@ -71,12 +73,14 @@ keyword-spotting/
 ### 3. **Audio Preprocessing**
 - The training pipeline applies a bandpass filter (300Hz-3000Hz) and normalization before feature extraction.
 - The same preprocessing is now applied in both `src/test_model.py` and `src/live_demo.py` for consistent results.
+- Feature scaling is applied using a pre-trained scaler for consistent feature ranges.
 
 ### 4. **Troubleshooting Model Predictions**
 - If the model predicts the wrong keyword with high confidence:
   - Double-check label order in all scripts.
   - Ensure feature extraction parameters match training.
   - Confirm that audio preprocessing (bandpass filter and normalization) is applied before MFCC extraction.
+  - Verify that feature scaling is applied correctly.
   - If issues persist, verify the model file matches the training configuration.
 
 ## Running the Test Script
@@ -86,6 +90,7 @@ To test the model on a specific audio file:
 python src/test_model.py
 ```
 - The script will print the true label, predicted keyword, and class probabilities.
+- Uses the pre-trained model from `models/keyword_spotting_mfcc_30ms_25ol.h5`
 
 ## Running the Live Demo
 
@@ -95,6 +100,7 @@ python src/live_demo.py
 ```
 - Speak one of the supported keywords into your microphone.
 - The detected keyword and confidence will be displayed in real time.
+- Real-time audio visualization and confidence scores for all keywords.
 
 ## Requirements
 - Python 3.7+
@@ -104,6 +110,8 @@ python src/live_demo.py
 - scikit-learn
 - matplotlib
 - joblib
+- numpy
+- pandas
 
 Install dependencies with:
 ```bash
@@ -146,6 +154,7 @@ The model training process includes:
 3. Model training with early stopping
 4. Learning rate reduction on plateau
 5. Model evaluation on validation set
+6. Feature scaling for improved performance
 
 ## Evaluation
 
@@ -154,6 +163,7 @@ The system is evaluated using:
 - Confusion matrix
 - False Acceptance Rate (FAR)
 - False Rejection Rate (FRR)
+- Real-time performance metrics
 
 ## Real-time Processing
 
@@ -163,6 +173,7 @@ The live demonstration includes:
 3. Model inference
 4. Confidence thresholding
 5. Keyword detection output
+6. Real-time visualization
 
 ## Best Practices
 
@@ -171,18 +182,21 @@ The live demonstration includes:
    - Apply data augmentation
    - Balance class distribution
    - Include background noise
+   - Apply consistent preprocessing
 
 2. **Model Selection**
    - CNN for faster inference
    - LSTM for better accuracy
    - Consider model size constraints
    - Balance accuracy vs. latency
+   - Use feature scaling
 
 3. **System Tuning**
    - Adjust detection threshold
    - Optimize feature parameters
    - Fine-tune model architecture
    - Monitor system performance
+   - Calibrate feature scaling
 
 ## Troubleshooting
 
@@ -191,18 +205,21 @@ The live demonstration includes:
    - Verify feature extraction
    - Monitor learning rate
    - Adjust batch size
+   - Validate feature scaling
 
 2. **Inference Problems**
    - Verify model loading
    - Check audio input
    - Adjust VAD threshold
    - Monitor system resources
+   - Validate feature scaling
 
 3. **Performance Issues**
    - Optimize feature extraction
    - Reduce model complexity
    - Use batch processing
    - Profile system bottlenecks
+   - Monitor memory usage
 
 ## Contributing
 
