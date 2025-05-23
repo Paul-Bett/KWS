@@ -26,7 +26,7 @@ OVERLAP_PERC = 0.25
 MAX_FRAMES = 100  # Match training value
 
 # Detection parameters
-CONFIDENCE_THRESHOLD = 0.2  # Lowered from 0.3
+CONFIDENCE_THRESHOLD = 0.3  # Lowered from 0.3
 SMOOTHING_WINDOW = 2  # Reduced from 3
 DETECTION_COOLDOWN = 0.5  # Reduced from 1.0
 AUDIO_THRESHOLD = 0.05  # Lowered audio threshold
